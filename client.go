@@ -24,6 +24,7 @@ type Client struct {
 	acks       map[int]*caller
 	id         int
 	namespace  string
+	startOnce  sync.Once
 }
 
 func NewClient(uri string, opts *Options) (client *Client, err error) {
@@ -56,9 +57,18 @@ func NewClient(uri string, opts *Options) (client *Client, err error) {
 		acks:   make(map[int]*caller),
 	}
 
-	go client.readLoop()
-
 	return
+}
+
+// Start begins dispatching incoming packets to registered handlers.
+// Must be called after all On(...) registrations: onPacket silently drops
+// events that have no registered handler, so packets flushed by the server
+// right after the handshake (e.g. a "connected" event) would be lost if the
+// read loop started before registration. Safe to call multiple times.
+func (client *Client) Start() {
+	client.startOnce.Do(func() {
+		go client.readLoop()
+	})
 }
 
 func (client *Client) On(message string, f interface{}) (err error) {
